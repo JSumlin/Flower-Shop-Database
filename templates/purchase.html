@@ -56,7 +56,7 @@
             <th>Product ID</th>
             <th>Quantity</th>
         </tr>
-        {% for purchase in purchases %}
+        {% for purchase in output %}
                 <tr>
                     <td>{{ purchase['orderID'] }}</td>
                     <td>{{ purchase['productID'] }}</td>

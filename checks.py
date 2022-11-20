@@ -156,3 +156,10 @@ class Checks:
             if not Checks.is_pos_num(x, "float", "Variable"):
                 return False
         return True
+
+
+    @staticmethod
+    def not_then_none(list):
+        for x in range(len(list)-1):
+            if not list[x+1]:
+                list[x+1] = None
