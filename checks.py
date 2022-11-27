@@ -96,43 +96,48 @@ class Checks:
         if cursor.fetchone() is None:
             return True
         return False
+
     @staticmethod
     def is_employeeID_exist(employeeID,cursor):
         cursor.execute("SELECT * FROM employee WHERE employeeID=?", (employeeID,))
         if cursor.fetchone() is None:
             return True
         return False
+
     @staticmethod
     def is_customerID_exist(customerID,cursor):
         cursor.execute("SELECT * FROM customer WHERE customerID=?", (customerID,))
         if cursor.fetchone() is None:
             return True
         return False
+
     @staticmethod
-    def is_product_exist(product,cursor):
+    def is_product_exist(product, cursor):
         cursor.execute("SELECT * FROM product WHERE p_desc=?", (product,))
         if cursor.fetchone() is None:
             return True
         return False
+
     @staticmethod
-    def is_productID_exist(productID,cursor):
+    def is_productID_exist(productID, cursor):
         cursor.execute("SELECT * FROM product WHERE productID=?", (int(productID),))
         if cursor.fetchone() is None:
             return True
         return False
+
     @staticmethod
     def is_order_exist(orderID,cursor):
         cursor.execute("SELECT * FROM orders WHERE orderID=?", (orderID,))
         if cursor.fetchone() is None:
             return True
         return False
+
     @staticmethod
     def is_purchase_exist(orderID,productID,cursor):
         cursor.execute("SELECT * FROM purchase WHERE orderID=? and productID=?", (orderID,productID))
         if cursor.fetchone() is None:
             return True
         return False
-
 
     @staticmethod
     def none_update(var_list, name_list, table, ID, cursor):
@@ -141,7 +146,6 @@ class Checks:
                 var_list[x] = cursor.execute("SELECT "+name_list[x+1]+" FROM "+table+" WHERE "+name_list[0]+"=?",
                                              (ID,)).fetchone()[0]
 
-
     @staticmethod
     def is_pos_int(test_list):
         for x in test_list:
@@ -149,14 +153,12 @@ class Checks:
                 return False
         return True
 
-
     @staticmethod
     def is_pos_float(test_list):
         for x in test_list:
             if not Checks.is_pos_num(x, "float", "Variable"):
                 return False
         return True
-
 
     @staticmethod
     def not_then_none(list):
