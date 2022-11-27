@@ -213,32 +213,49 @@ class Database:
     def sort_filter(self,table,order,asc,target,value,op):
         return self.conn.execute("SELECT * FROM "+table+" WHERE "+target+" "+op+" \""+value+"\" ORDER BY "+order+" "+asc).fetchall()
 
+    # returns the customerID linked to a phone number. If the phone number is None, it returns None.
+    def get_customerID(self, phone):
+        if phone is not None:
+            return int(self.cursor.execute("SELECT customerID FROM customer WHERE phone=?",
+                                           (phone,)).fetchone()[0])
+        else:
+            return None
+
+    # creates a new order with a total of 0 so that the orderID can be used in ord_transaction
+    def __get_new_orderID(self, customerID, employeeID):
+        self.cursor.execute("INSERT INTO orders (customerID, employeeID, total) VALUES (?, ?, ?)",
+                            (customerID, employeeID, 0))
+        return self.cursor.execute("SELECT MAX(orderID) from orders").fetchone()[0]
+
+    # Uses the order dictionary, and the orderID made in __get_new_orderID to add the products purchased and their
+    # quantity to the purchase table. It also tallies to total for the orders table and updates the stock on the
+    # product table.
+    def __ord_trans_util(self, ord_dict, orderID):
+        # keys is a list of all productIDs that exist, which make up all the keys of the order dictionary
+        keys = list(ord_dict.keys())
+        for x in range(len(ord_dict)):
+            if int(ord_dict[keys[x]]) > 0:  # if the quantity for the productID is greater than 0
+                self.cursor.execute("INSERT INTO purchase (orderID, productID, quantity) VALUES (?, ?, ?)",
+                                    (orderID, keys[x], int(ord_dict[keys[x]])))
+                price = self.cursor.execute("SELECT price FROM product WHERE productID=?",
+                                            (keys[x],)).fetchone()[0]
+                self.cursor.execute("UPDATE orders SET total=? WHERE orderID=?",
+                                    (round(self.cursor.execute("SELECT total FROM orders WHERE orderID=?",
+                                                               (orderID,)).fetchone()[0] + int(ord_dict[keys[x]]) *
+                                           price, 2), orderID))
+                self.cursor.execute("UPDATE product SET stock=? WHERE productID=?",
+                                    ((self.cursor.execute("SELECT stock FROM product WHERE productID=?",
+                                                          (keys[x],)).fetchone()[0] - int(ord_dict[keys[x]])), keys[x]))
     #handles transactions for placing orders
-    def ord_transaction(self, phone, employeeID, list):
+    def ord_transaction(self, phone, employeeID, ord_dict: dict):
         with self.conn:
             self.cursor.execute("BEGIN")
             try:
-                if phone is not None:
-                    customerID = int(self.cursor.execute("SELECT customerID FROM customer WHERE phone=?",
-                                                         (phone,)).fetchone()[0])
-                else:
-                    customerID = None
-                self.cursor.execute("INSERT INTO orders (customerID, employeeID, total) VALUES (?, ?, ?)",
-                                    (customerID, employeeID, 0))
-                orderID = self.cursor.execute("SELECT MAX(orderID) from orders").fetchone()[0]
-                for x in range(len(list)):
-                    if int(list[x]) > 0:
-                        self.cursor.execute("INSERT INTO purchase (orderID, productID, quantity) VALUES (?, ?, ?)",
-                                            (orderID, x+1, int(list[x])))
-                        price = self.cursor.execute("SELECT price FROM product WHERE productID=?",
-                                                    (x+1,)).fetchone()[0]
-                        self.cursor.execute("UPDATE orders SET total=? WHERE orderID=?",
-                                            (round(self.cursor.execute("SELECT total FROM orders WHERE orderID=?",
-                                                                 (orderID,)).fetchone()[0] + int(list[x]) * price, 2), orderID))
-                        self.cursor.execute("UPDATE product SET stock=? WHERE productID=?",
-                                            ((self.cursor.execute("SELECT stock FROM product WHERE productID=?",
-                                                                  (x+1,)).fetchone()[0] - int(list[x])), x+1))
+                orderID = self.__get_new_orderID(self.get_customerID(phone), employeeID)
+                self.__ord_trans_util(ord_dict, orderID)
                 self.conn.commit()
             except sqlite3.Error:
                 print("transaction failed")
                 self.cursor.execute("ROLLBACK")
+                return False
+            return True

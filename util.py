@@ -226,34 +226,36 @@ class Util:
 
     @staticmethod
     def __place_ord_manager(request, db, output):
-        # ord_dict = dict()
-        # conn = sqlite3.connect('flowershopdatabase.db', check_same_thread=False)
-        # list = conn.cursor().execute("SELECT productID FROM product").fetchall()
-        # conn.close()
-        id = 1
-        list = []
+        ord_dict = dict()
         phone = Util.__pl_ord_inp(request.form['phone'])
         employeeID = Util.__pl_ord_inp(request.form['employeeID'])
-        # if the user entered an employeeID, but the employeeID does not exist, flash error message for user
+        # list of productIDs to use as dictionary keys
+        keys = Util.__get_keys()
+        # if the user entered an employeeID, but the employeeID does not exist, an error message shows for the user
         if employeeID is not None and db.cursor.execute("SELECT * FROM employee WHERE employeeID=?",
                                                         (int(employeeID),)).fetchone() is None:
             flash("EmployeeID not found.")
             return render_template('placeOrder.html', output=output)
-
-        # if the user entered a phone number, but the number does not exist, flash error message for user
+        # if the user entered a phone number, but the number does not exist, an error message shows for the user
         if phone is not None and db.cursor.execute("SELECT * FROM customer WHERE phone=?",
                                                    (int(phone),)).fetchone() is None:
             flash("Phone not found.")
             return render_template('placeOrder.html', output=output)
-        # add all the quantity inputs to a list. each quantity value's index in the list reflects the productID
-        #       that the value is for.
+        # adds all the quantity inputs to a dictionary with the corresponding productIDs as keys
         for x in range(len(db.conn.execute("SELECT productID FROM product").fetchall())):
-           # ord_dict[str(list[x][0])] = request.form[str(list[x][0])]
-            list.append(request.form['' + str(id)])
-            id = id + 1
-        db.ord_transaction(phone, employeeID, list)
-        #print(ord_dict)
+            ord_dict[str(keys[x][0])] = request.form[str(keys[x][0])]
+        # carries out order transaction. if transaction fails, an error messages shows for the user
+        if not db.ord_transaction(phone, employeeID, ord_dict):
+            flash("There was an error when placing the order.")
         return redirect(url_for('index'))
+
+    # gets list of all existing productIDs to use as dictionary keys
+    @staticmethod
+    def __get_keys():
+        conn = sqlite3.connect('flowershopdatabase.db', check_same_thread=False)
+        keys = conn.cursor().execute("SELECT productID FROM product").fetchall()
+        conn.close()
+        return keys
 
     @staticmethod
     def __pl_ord_inp(input):
