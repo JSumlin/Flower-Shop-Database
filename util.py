@@ -43,7 +43,10 @@ class Util:
         if (not Checks.is_order_exist(orderID, db.cursor)) and (not Checks.is_productID_exist(productID, db.cursor)):
             # and if a tuple exists in purchase with the given orderID and productID, update the tuple
             if not (Checks.is_purchase_exist(orderID, productID, db.cursor)):
-                db.upd_pur(orderID, productID, quantity)
+                if not quantity:
+                    flash("Must enter a quantity to update.")
+                else:
+                    db.upd_pur(orderID, productID, quantity)
             else:
                 flash("Purchase does not exist.")
         else:
@@ -55,7 +58,9 @@ class Util:
     def __pur_del_req(request, db):
         orderID = request.form["orderID2"]
         productID = request.form["productID2"]
-        if not (Checks.is_purchase_exist(orderID, productID, db.cursor)):
+        if not orderID or not productID:
+            flash("Must enter an order # and product ID to delete.")
+        elif not (Checks.is_purchase_exist(orderID, productID, db.cursor)):
             db.del_pur(orderID, productID)
         output = db.conn.execute("SELECT * FROM purchase").fetchall()
         return render_template("purchase.html", output=output)
@@ -166,26 +171,42 @@ class Util:
         if request.form.get('sort') == 'sort':
             return Util.get_sort(request.form, "product", "products", db)
         elif request.form.get('add') == 'add':
-            list = [request.form["productID"], request.form["product"], request.form["price"], request.form["quantity"]]
-            if not list[0]:
-                if not list[1] or not list[2] or not list[3]:
-                    flash("Product, price, and quantity all required for adding.")
-                    return render_template("products.html", output=output)
-                db.add_prod(list[1], list[2], list[3])
-            elif db.cursor.execute("SELECT * FROM product WHERE productID=?", (list[0],)).fetchone() is None:
-                flash("Product ID does not exist. Only fill product ID field for updating.")
-                return render_template("products.html", output=output)
-            else:
-                Checks.not_then_none(list)
-                db.upd_prod(list[0], list[1], list[2], list[3])
-            output = db.conn.execute("SELECT * FROM product").fetchall()
+            return Util.__prod_add_req(request, db, output)
         elif request.form.get('del') == 'del':
-            productID = request.form["productID2"]
-            if db.cursor.execute("SELECT * FROM product WHERE productID=?", (productID,)).fetchone() is not None:
-                db.del_prod(productID)
-            else:
-                flash("Product ID does not exist.")
-            output = db.conn.execute("SELECT * FROM product").fetchall()
+            return Util.__prod_del_req(request, db)
+        return render_template("products.html", output=output)
+
+    @staticmethod
+    def __prod_del_req(request, db):
+        productID = request.form["productID2"]
+        if db.cursor.execute("SELECT * FROM product WHERE productID=?", (productID,)).fetchone() is not None:
+            db.del_prod(productID)
+        else:
+            flash("Product ID does not exist.")
+        output = db.conn.execute("SELECT * FROM product").fetchall()
+        return render_template("products.html", output=output)
+
+    @staticmethod
+    def __prod_add_req(request, db, output):
+        list = [request.form["productID"], request.form["product"], request.form["price"], request.form["quantity"]]
+        if not list[0]:
+            return Util.__add_prod(list, output, db)
+        elif db.cursor.execute("SELECT * FROM product WHERE productID=?", (list[0],)).fetchone() is None:
+            flash("Product ID does not exist. Only fill product ID field for updating.")
+            return render_template("products.html", output=output)
+        else:
+            Checks.not_then_none(list)
+            db.upd_prod(list[0], list[1], list[2], list[3])
+        output = db.conn.execute("SELECT * FROM product").fetchall()
+        return render_template("products.html", output=output)
+
+    @staticmethod
+    def __add_prod(list, output, db):
+        if not list[1] or not list[2] or not list[3]:
+            flash("Product, price, and quantity all required for adding.")
+            return render_template("products.html", output=output)
+        db.add_prod(list[1], list[2], list[3])
+        output = db.conn.execute("SELECT * FROM product").fetchall()
         return render_template("products.html", output=output)
 
     @staticmethod
@@ -193,35 +214,45 @@ class Util:
         if request.form.get('sort') == 'sort':
             return Util.get_sort(request.form, "orders", "orders", db)
         elif request.form.get('add') == 'add':
-            orderID = request.form["orderID"]
-            customerID = request.form["customerID"]
-            employeeID = request.form["employeeID"]
-            if not customerID:
-                customerID = None
-            if not employeeID:
-                employeeID = None
-            if not orderID:
-                flash("Order # required for updates.")
-                return render_template("orders.html", output=output)
-            if customerID is None or not Checks.is_customerID_exist(customerID, db.cursor):
-                if employeeID is None or not Checks.is_employeeID_exist(employeeID, db.cursor):
-                    if not (Checks.is_order_exist(orderID, db.cursor)):
-                        db.upd_ord(orderID, customerID, employeeID)
-                    else:
-                        flash("Order # does not exist.")
-                        return render_template("orders.html", output=output)
+            return Util.__ord_add_req(request, db, output)
+        elif request.form.get('del') == 'del':
+            return Util.__ord_del_req(request, db)
+        return render_template("orders.html", output=output)
+
+    @staticmethod
+    def __ord_del_req(request, db):
+        orderID = request.form["orderID2"]
+        if not (Checks.is_order_exist(orderID, db.cursor)):
+            db.del_ord(int(orderID))
+        output = db.conn.execute("SELECT * FROM orders").fetchall()
+        return render_template("orders.html", output=output)
+
+    # Used when a user wants to update the employeeID and/or the customerID for a tuple in the orders table. First
+    # checks if the user entered an orderID. If they didn't, it gives the user an error message. Then the nested if
+    # statements is: if an customerID wasn't enter or the one entered exists -> and if an employeeID wasn't entered or
+    # the one entered exists -> and if the orderID exists -> update the order. If any of these fail, give the
+    # appropriate error message.
+    @staticmethod
+    def __ord_add_req(request, db, output):
+        lst = [request.form["orderID"], request.form["customerID"], request.form["employeeID"]]
+        Checks.not_then_none(lst)
+        if not lst[0]:
+            flash("Order # required for updates.")
+            return render_template("orders.html", output=output)
+        if lst[1] is None or not Checks.is_customerID_exist(lst[1], db.cursor):
+            if lst[2] is None or not Checks.is_employeeID_exist(lst[2], db.cursor):
+                if not (Checks.is_order_exist(lst[0], db.cursor)):
+                    db.upd_ord(lst[0], lst[1], lst[2])
                 else:
-                    flash("Employee ID does not exist.")
+                    flash("Order # does not exist.")
                     return render_template("orders.html", output=output)
             else:
-                flash("Customer ID does not exist.")
+                flash("Employee ID does not exist.")
                 return render_template("orders.html", output=output)
-            output = db.conn.execute("SELECT * FROM orders").fetchall()
-        elif request.form.get('del') == 'del':
-            orderID = request.form["orderID2"]
-            if not (Checks.is_order_exist(orderID, db.cursor)):
-                db.del_ord(int(orderID))
-            output = db.conn.execute("SELECT * FROM orders").fetchall()
+        else:
+            flash("Customer ID does not exist.")
+            return render_template("orders.html", output=output)
+        output = db.conn.execute("SELECT * FROM orders").fetchall()
         return render_template("orders.html", output=output)
 
     @staticmethod

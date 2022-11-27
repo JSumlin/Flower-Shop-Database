@@ -105,7 +105,7 @@ class Database:
         if not Checks.is_pos_int([var_list[2], productID]) or not Checks.is_pos_float([var_list[1]]):
             return
         self.cursor.execute("UPDATE PRODUCT SET P_DESC = ?, PRICE = ?, STOCK = ? WHERE PRODUCTID = ?",
-                                (p_desc, float(var_list[1]), int(var_list[2]),int(productID)))
+                                (var_list[0], float(var_list[1]), int(var_list[2]),int(productID)))
         self.conn.commit()
 
     #update function for orders table
@@ -119,12 +119,14 @@ class Database:
         if customerID is not None and employeeID is not None:
             self.cursor.execute("UPDATE ORDERS SET CUSTOMERID = ?, EMPLOYEEID = ? WHERE ORDERID = ?",
                                 (int(customerID), int(employeeID), int(orderID)))
-        elif employeeID is None:
+        elif employeeID is None and customerID is not None:
             self.cursor.execute("UPDATE ORDERS SET CUSTOMERID = ? WHERE ORDERID = ?",
                                 (int(customerID), int(orderID)))
-        elif customerID is None:
+        elif customerID is None and employeeID is not None:
             self.cursor.execute("UPDATE ORDERS SET EMPLOYEEID = ? WHERE ORDERID = ?",
                                 (int(employeeID), int(orderID)))
+        else:
+            flash("Must enter customer ID and/or employee ID to update.")
         self.conn.commit()
 
     def upd_pur(self,orderID,productID,quantity):
@@ -133,8 +135,8 @@ class Database:
         with self.conn:
             self.cursor.execute("BEGIN")
             try:
-                quan_diff = int(quantity) - self.cursor.execute("SELECT quantity FROM purchase WHERE orderID=? and productID = ?",
-                                               (orderID, productID)).fetchone()[0]
+                quan_diff = int(quantity) - self.cursor.execute("""SELECT quantity FROM purchase 
+                WHERE orderID=? and productID = ?""", (orderID, productID)).fetchone()[0]
                 stock = self.cursor.execute("""SELECT stock FROM product WHERE productID = ?""",
                                                    (productID,)).fetchone()[0]
                 if quan_diff > stock:
@@ -193,7 +195,7 @@ class Database:
                                                (orderID, productID)).fetchone()[0]
                 price = self.cursor.execute("SELECT price FROM product WHERE productID = ?",
                                                (productID,)).fetchone()[0]
-                total= self.cursor.execute("SELECT total FROM orders WHERE orderID=?", (orderID,)).fetchone()[0]
+                total = self.cursor.execute("SELECT total FROM orders WHERE orderID=?", (orderID,)).fetchone()[0]
                 self.cursor.execute("UPDATE orders SET total = ? WHERE orderID=?", (total-price*quantity, orderID))
                 self.cursor.execute("DELETE FROM purchase WHERE orderID=? and PRODUCTID = ?", (orderID, productID))
                 self.conn.commit()
@@ -203,15 +205,15 @@ class Database:
 
     #sorted select functions
     def sort_table(self,table,order,asc):
-        return self.conn.execute("SELECT * FROM "+table+" ORDER BY "+order+" "+asc).fetchall()
+        return self.conn.execute(f"SELECT * FROM {table} ORDER BY {order} {asc}").fetchall()
 
     #Filters results
     def filter_table(self,table,target,value,op):
-        return self.conn.execute("SELECT * FROM "+table+" WHERE "+target+" "+op+" \""+value+"\"").fetchall()
+        return self.conn.execute(f"SELECT * FROM {table} WHERE {target} {op} \"{value}\"").fetchall()
 
     #sorts and filters
     def sort_filter(self,table,order,asc,target,value,op):
-        return self.conn.execute("SELECT * FROM "+table+" WHERE "+target+" "+op+" \""+value+"\" ORDER BY "+order+" "+asc).fetchall()
+        return self.conn.execute(f"SELECT * FROM {table} WHERE {target} {op} \"{value}\" ORDER BY {order} {asc}").fetchall()
 
     # returns the customerID linked to a phone number. If the phone number is None, it returns None.
     def get_customerID(self, phone):
@@ -231,21 +233,23 @@ class Database:
     # quantity to the purchase table. It also tallies to total for the orders table and updates the stock on the
     # product table.
     def __ord_trans_util(self, ord_dict, orderID):
-        # keys is a list of all productIDs that exist, which make up all the keys of the order dictionary
-        keys = list(ord_dict.keys())
+        keys = list(ord_dict.keys())  # a list of all productIDs that exist in the database
         for x in range(len(ord_dict)):
             if int(ord_dict[keys[x]]) > 0:  # if the quantity for the productID is greater than 0
                 self.cursor.execute("INSERT INTO purchase (orderID, productID, quantity) VALUES (?, ?, ?)",
                                     (orderID, keys[x], int(ord_dict[keys[x]])))
                 price = self.cursor.execute("SELECT price FROM product WHERE productID=?",
                                             (keys[x],)).fetchone()[0]
+                # tallies total. Updates total to current total + quantity * price
                 self.cursor.execute("UPDATE orders SET total=? WHERE orderID=?",
                                     (round(self.cursor.execute("SELECT total FROM orders WHERE orderID=?",
                                                                (orderID,)).fetchone()[0] + int(ord_dict[keys[x]]) *
                                            price, 2), orderID))
+                # Updates stock. Subtracts quantity purchased from current stock.
                 self.cursor.execute("UPDATE product SET stock=? WHERE productID=?",
                                     ((self.cursor.execute("SELECT stock FROM product WHERE productID=?",
                                                           (keys[x],)).fetchone()[0] - int(ord_dict[keys[x]])), keys[x]))
+
     #handles transactions for placing orders
     def ord_transaction(self, phone, employeeID, ord_dict: dict):
         with self.conn:

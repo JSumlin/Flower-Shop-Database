@@ -48,7 +48,6 @@ def customers():
     db = Database(conn,cursor)
     output = conn.execute("SELECT * FROM customer").fetchall()
     if request.method == "POST":
-        print(request.form)
         return Util.request_manager("customer", request, db, output)
     return render_template('customer.html', output=output)
 

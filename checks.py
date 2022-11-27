@@ -161,7 +161,7 @@ class Checks:
         return True
 
     @staticmethod
-    def not_then_none(list):
+    def not_then_none(list: list):
         for x in range(len(list)-1):
             if not list[x+1]:
                 list[x+1] = None
